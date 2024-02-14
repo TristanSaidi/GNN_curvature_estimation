@@ -10,6 +10,7 @@ class GCNTrainer(object):
                  data_dir, 
                  save_dir,
                  exp_name, 
+                 subgraph_k,
                  hidden_channels, # model hyperparameters
                  batch_size, 
                  learning_rate,
@@ -21,6 +22,7 @@ class GCNTrainer(object):
         self.exp_name = exp_name
         os.makedirs(self.save_dir, exist_ok=True)
         os.makedirs(os.path.join(self.save_dir, self.exp_name), exist_ok=True)
+        self.subgraph_k = subgraph_k
         self.hidden_channels = hidden_channels
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -33,7 +35,7 @@ class GCNTrainer(object):
         self.initialize_model()
 
     def load_data(self):
-        dataset = ManifoldGraphDataset(self.data_dir)
+        dataset = ManifoldGraphDataset(self.data_dir, self.subgraph_k)
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
         self.train_loader = DataLoader(train_set, batch_size=self.batch_size, shuffle=True)

@@ -7,9 +7,10 @@ import os
 from tqdm import tqdm
 
 class ManifoldGraphDataset(Dataset):
-    def __init__(self, root):
-        super(ManifoldGraphDataset, self).__init__(root)
+    def __init__(self, root, subgraph_k):
+        super(ManifoldGraphDataset, self).__init__()
         self.file_list = os.listdir(root)
+        self.subgraph_k = subgraph_k
         self.data = self.load(root, self.file_list)
 
     def load(self, root, file_list):
@@ -17,7 +18,7 @@ class ManifoldGraphDataset(Dataset):
         for file in file_list:
             full_graph = torch.load(os.path.join(root, file))
             for i in tqdm(range(full_graph.x.shape[0]), desc=f'Processing {file}'):
-                subgraph_nodes, subgraph_edges, mapping, _ = k_hop_subgraph(i, 10, full_graph.edge_index.transpose(0,1).long(), relabel_nodes=True, directed=False)
+                subgraph_nodes, subgraph_edges, mapping, _ = k_hop_subgraph(i, self.subgraph_k, full_graph.edge_index.transpose(0,1).long(), relabel_nodes=True, directed=False)
                 subgraph = Data(x=full_graph.x[subgraph_nodes], edge_index=subgraph_edges, edge_attr=full_graph.edge_attr[subgraph_edges[0]], y=full_graph.y[i])
                 data_list.append(subgraph)
         return data_list

@@ -32,7 +32,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--epochs',
-        default=20,
+        default=100,
         type=int,
         help='number of times to repeat experiment'
     )
@@ -41,6 +41,12 @@ def main() -> int:
         default=128,
         type=int,
         help='mini-batch size used to train model'
+    )
+    parser.add_argument(
+        '--subgraph_k',
+        default=2,
+        type=int,
+        help='number of hops to use in constructing subgraphs'
     )
     parser.add_argument(
         '--learning_rate',
