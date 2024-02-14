@@ -66,7 +66,7 @@ class GCNTrainer(object):
         for data in self.train_loader:
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            out = self.model(data.x.float(), data.edge_index, data.batch)
+            out = self.model(data.x.float(), data.edge_index, data.edge_attr.float(), data.batch)
             loss = F.mse_loss(out, data.y.unsqueeze(1).float())
             loss.backward()
             running_loss += loss.item()
@@ -79,7 +79,7 @@ class GCNTrainer(object):
         with torch.no_grad():
             for data in self.val_loader:
                 data = data.to(self.device)
-                out = self.model(data.x.float(), data.edge_index, data.batch)
+                out = self.model(data.x.float(), data.edge_index, data.edge_attr.float(), data.batch)
                 loss = F.mse_loss(out, data.y.unsqueeze(1).float())
                 running_loss += loss.item()
         return running_loss / len(self.val_loader)

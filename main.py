@@ -9,14 +9,12 @@ def main() -> int:
 
     parser.add_argument(
         '--data_dir',
-        default=
-        'data',
+        default='data',
         help='path to data files'
     )
     parser.add_argument(
         '--save_dir',
-        default=
-        'outputs',
+        default='outputs',
         help='path to saved model files'
     )
     parser.add_argument(
@@ -26,9 +24,9 @@ def main() -> int:
     )
     parser.add_argument(
         '--hidden_channels',
-        default=64,
+        default=256,
         type=int,
-        help='number of times to repeat experiment'
+        help='number of hidden channels in model'
     )
     parser.add_argument(
         '--epochs',
@@ -44,13 +42,13 @@ def main() -> int:
     )
     parser.add_argument(
         '--subgraph_k',
-        default=2,
+        default=1,
         type=int,
         help='number of hops to use in constructing subgraphs'
     )
     parser.add_argument(
         '--learning_rate',
-        default=1e-3,
+        default=1e-5,
         type=float,
         help='learning rate for optimizer'
     )
