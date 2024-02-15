@@ -3,6 +3,7 @@ from src.models.gnn import GCNRegressor
 from src.datasets.dataset import ManifoldGraphDataset
 from torch_geometric.loader import DataLoader
 from torch.nn import functional as F
+from tensorboardX import SummaryWriter
 import os
 
 class GCNTrainer(object):
@@ -21,7 +22,9 @@ class GCNTrainer(object):
         self.save_dir = save_dir
         self.exp_name = exp_name
         os.makedirs(self.save_dir, exist_ok=True)
-        os.makedirs(os.path.join(self.save_dir, self.exp_name), exist_ok=True)
+        self.save_path = os.path.join(self.save_dir, self.exp_name)
+        os.makedirs(self.save_path, exist_ok=True)
+        os.makedirs(os.path.join(self.save_path, 'nn'), exist_ok=True)
         self.subgraph_k = subgraph_k
         self.hidden_channels = hidden_channels
         self.batch_size = batch_size
@@ -29,6 +32,9 @@ class GCNTrainer(object):
         self.split = split
         self.device = device
 
+        # setup logging
+        self.train_writer = SummaryWriter(os.path.join(self.save_path, 'logs_train'))
+        self.val_writer = SummaryWriter(os.path.join(self.save_path, 'logs_val'))
         # load data and 
         self.load_data()
         # initialize model
@@ -39,7 +45,7 @@ class GCNTrainer(object):
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
         self.train_loader = DataLoader(train_set, batch_size=self.batch_size, shuffle=True)
-        self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=False)
+        self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=True)
 
     def initialize_model(self):
         self.model = GCNRegressor(num_node_features=self.num_node_features, hidden_channels=self.hidden_channels).to(self.device)
@@ -48,17 +54,20 @@ class GCNTrainer(object):
     def train(self, epochs):
         val_loss_min = float('inf')
         for epoch in range(epochs):
-            self.train_epoch()
+            train_loss = self.train_epoch()
             val_loss = self.eval()
+            # log training and validation loss
+            self.train_writer.add_scalar('Loss', train_loss, epoch)
+            self.val_writer.add_scalar('Loss', val_loss, epoch)
             if val_loss < val_loss_min:
                 print(f'Epoch {epoch}: Validation loss decreased ({val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-                self.save(epoch, self.model.state_dict())
+                self.save(self.model.state_dict())
                 val_loss_min = val_loss
             else:
                 print(f'Epoch {epoch}: Validation loss: {val_loss}')
 
-    def save(self, epoch, state_dict):
-        torch.save(state_dict, os.path.join(self.save_dir, f'{self.exp_name}/epoch_{epoch}.pt'))
+    def save(self, state_dict):
+        torch.save(state_dict, os.path.join(self.save_path, 'nn/best_val.pt'))
 
     def train_epoch(self):
         self.model.train()
