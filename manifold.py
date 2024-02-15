@@ -4,6 +4,7 @@ import numpy as np
 from scipy.special import gamma
 import math
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 #from mpl_toolkits import mplot3d
 
 ##############################################################################
@@ -225,8 +226,7 @@ class PoincareDisk:
         if polar: assert K == -1
         N = X.shape[0]
         Rdist = np.zeros((N, N))
-        for i in range(N):
-            print(i)
+        for i in tqdm(range(N), desc = "Computing distance matrix for Poincare disc"):
             for j in range(i):
                 x1 = X[i, :]
                 x2 = X[j, :]
@@ -257,10 +257,6 @@ class Hyperboloid:
     def sample(N, a = 2, c = 1, B = 2, within_halfB = True):
         # if within_halfB = False, then sample N points from the hyperboloid with u in [-B, B]
         # if within_halfB = True, then sample points uniformly from u in [-B, B] until there are at least N points with u in [-.5B, .5B]
-        print(within_halfB)
-        print("a = ", a)
-        print("c = ", c)
-        print("B = ", B)
         sqrt_max_det_g = math.sqrt(Hyperboloid.det_g(a, c, B))
         us = []
         thetas = []
@@ -270,12 +266,11 @@ class Hyperboloid:
             u = 2*B*np.random.random() - B
             eta = sqrt_max_det_g*np.random.random()
             sqrt_det_g = math.sqrt(Hyperboloid.det_g(a, c, u))
-            
             if eta < sqrt_det_g:
-                us.append(u)
-                thetas.append(theta)
                 if (within_halfB and -.5*B <= u <= .5*B) or (not within_halfB):
                     i += 1
+                    us.append(u)
+                    thetas.append(theta)
        
         xs = [a*math.cos(thetas[i])*math.sqrt(u**2 + 1) for i, u in enumerate(us)]
         ys = [a*math.sin(thetas[i])*math.sqrt(u**2 + 1) for i, u in enumerate(us)]
