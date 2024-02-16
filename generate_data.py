@@ -189,33 +189,23 @@ def main():
         os.makedirs(output_dir)
     
     # Create 2-sphere data
-    R = 1
     d = 2
-    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
-    # Create 3-sphere data
-    R = 1
-    d = 3
-    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
-    # Create 5-sphere data
-    R = 1
-    d = 5
-    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
-    # Create 7-sphere data
-    R = 1
-    d = 7
-    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
+    rs = [0.25, 0.5, 1, 2, 3]
+    for R in rs:
+        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
     # Create torus data
-    inner_radius = 1
-    outer_radius = 2
-    create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'))
+    rads = [(1, 1), (1, 2), (2, 1), (2, 2)]
+    for inner_radius, outer_radius in rads:
+        create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'))
     # Create euclidean data
     d = 3
     rad = 2
     create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'))
     # Create poincare data
-    K = -1
     Rh = 1
-    create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'))
+    Ks = [-3, -2, -1, -0.5, -0.25]
+    for K in Ks:
+        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'))
     # Create hyperbolic data
     create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'))
     return
