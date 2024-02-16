@@ -7,13 +7,15 @@ from torch_geometric.data import Data
 from curvature import *
 import os
 import argparse
+from gtda.graphs import KNeighborsGraph
+from scipy import sparse
 
-def get_ball_ratios(d, X, features_max_k):
-    sce_sphere = scalar_curvature_est(d, X, verbose=True)
-    v_i = []
+def get_ball_ratios(d, X, features_max_k, pairwise_dists=None):
+    sce = scalar_curvature_est(d, X, Rdist=pairwise_dists, verbose=True)
+    v_i = [] # list of ball ratios for each vertex
     for i in range(X.shape[0]):
-        _, sphere_ball_ratios = sce_sphere.ball_ratios(i, max_k=features_max_k)
-        v_i.append(sphere_ball_ratios)
+        _, ball_ratios = sce.ball_ratios(i, max_k=features_max_k)
+        v_i.append(ball_ratios)
     v_i = np.array(v_i)
     return v_i
 
@@ -103,8 +105,14 @@ def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu',
 def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path=None):
     print(f'Creating poincare dataset with {N} nodes, curvature {K}, and radius {Rh}')
     X = manifold.PoincareDisk.sample(N, K, Rh)
-    adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
-    node_features = get_ball_ratios(2, X, features_max_k)
+    # data isn't embedded in euclidean space --> need to compute hyperbolic distances for kNN
+    pairwise_dists = manifold.PoincareDisk.Rdist_array(X)
+    sparse_pairwise_dists = sparse.csr_matrix(pairwise_dists)
+    knn_graph = KNeighborsGraph(n_neighbors=k, metric='precomputed')
+    adjacency_mat = knn_graph.fit_transform([sparse_pairwise_dists])[0]
+    edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
+
+    node_features = get_ball_ratios(2, X, features_max_k, pairwise_dists)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -122,6 +130,29 @@ def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path
     if path is not None:
         torch.save(poincare_data, path)
     return poincare_data
+
+def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=None):
+    X = manifold.Hyperboloid.sample(N)
+    adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
+    node_features = get_ball_ratios(2, X, features_max_k)
+    node_features = torch.tensor(node_features).to(device)
+    # Convert adjacency matrix to edge list
+    edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
+    edge_list = torch.tensor(edge_list).to(device)
+    edge_attrs = torch.tensor(edge_attrs).to(device)
+    # Create node labels (scalar curvature in this case)
+    curvature = manifold.Hyperboloid.S(X[:, -1])
+    node_labels = torch.tensor(curvature).unsqueeze(-1).to(device)
+    hyperbolic_data = Data(x=node_features, edge_index=edge_list, edge_attr=edge_attrs, y=node_labels)
+
+    assert edge_list.shape == (N*k, 2)
+    assert edge_attrs.shape == (N*k,1)
+    assert node_labels.shape == (N,1)
+
+    if path is not None:
+        torch.save(hyperbolic_data, path)
+    return hyperbolic_data
+
 
 
 def main():
@@ -156,10 +187,22 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
-    # Create sphere data
+    # Create 2-sphere data
     R = 1
     d = 2
-    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_rad_{R}_nodes_{N}_dim_{d}_k_{k}.pt'))
+    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
+    # Create 3-sphere data
+    R = 1
+    d = 3
+    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
+    # Create 5-sphere data
+    R = 1
+    d = 5
+    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
+    # Create 7-sphere data
+    R = 1
+    d = 7
+    create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
     # Create torus data
     inner_radius = 1
     outer_radius = 2
@@ -172,6 +215,8 @@ def main():
     K = -1
     Rh = 1
     create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'))
+    # Create hyperbolic data
+    create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'))
     return
 
 if __name__ == '__main__':
