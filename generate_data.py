@@ -49,7 +49,7 @@ def create_sphere_dataset(R, N, d=2, k=10, features_max_k=2500, device='cpu', pa
     sphere_data = Data(x=node_features, edge_index=edge_list, edge_attr=edge_attrs, y=node_labels)
     if path is not None:
         torch.save(sphere_data, path)
-    return sphere_data
+    return sphere_data, X
 
 def create_torus_dataset(inner_radius, outer_radius, N, k=10, features_max_k=2500, device='cpu', path=None):
     print(f'Creating torus dataset with {N} nodes, inner radius {inner_radius}, and outer radius {outer_radius}')
@@ -74,7 +74,7 @@ def create_torus_dataset(inner_radius, outer_radius, N, k=10, features_max_k=250
 
     if path is not None:
         torch.save(torus_data, path)
-    return torus_data
+    return torus_data, X
 
 
 def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu', path=None):
@@ -99,7 +99,7 @@ def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu',
     
     if path is not None:
         torch.save(euclidean_data, path)
-    return euclidean_data
+    return euclidean_data, X
 
 
 def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path=None):
@@ -129,9 +129,10 @@ def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path
 
     if path is not None:
         torch.save(poincare_data, path)
-    return poincare_data
+    return poincare_data, X
 
 def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=None):
+    print(f'Creating hyperbolic dataset with {N} nodes')
     X = manifold.Hyperboloid.sample(N)
     adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
     node_features = get_ball_ratios(2, X, features_max_k)
@@ -151,7 +152,7 @@ def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=N
 
     if path is not None:
         torch.save(hyperbolic_data, path)
-    return hyperbolic_data
+    return hyperbolic_data, X
 
 
 
