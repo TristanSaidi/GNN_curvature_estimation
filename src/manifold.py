@@ -37,13 +37,10 @@ class Sphere:
     def sample(N, n, noise = 0, R = 1):
          # To sample a point x, let x_i ~ N(0, 1) and then rescale to have norm R. then add isotropic Gaussian noise to x with variance noise^2
         X = []
-        noise_mean = np.zeros(n+1)
-        noise_cov = (noise**2)*np.identity(n+1)
         for i in range(N):
             x = np.random.normal(size = n+1)
             x /= np.linalg.norm(x)
             x *= R
-            x += np.random.multivariate_normal(noise_mean, noise_cov)
             X.append(x)
         return np.array(X)
     
