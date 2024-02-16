@@ -1,10 +1,10 @@
 import numpy as np
-import manifold
+import src.manifold as manifold
 import matplotlib.pyplot as plt
 from sklearn import neighbors
 import torch
 from torch_geometric.data import Data
-from curvature import *
+from src.curvature import *
 import os
 import argparse
 from gtda.graphs import KNeighborsGraph
