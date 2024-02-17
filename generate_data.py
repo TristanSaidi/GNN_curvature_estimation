@@ -178,12 +178,19 @@ def main():
         default=10, 
         help='Number of neighbors for each node in the graph'
     )
+    argparser.add_argument(
+        '--features_max_k',
+        type=int,
+        default=2500,
+        help='Maximum k for computing ball ratios'
+    )
 
     args = argparser.parse_args()
     output_dir = args.output_dir
     
     N = args.N # Number of nodes
     k = args.k # Number of neighbors
+    features_max_k = args.features_max_k # Maximum k for computing ball ratios
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -192,22 +199,22 @@ def main():
     d = 2
     rs = [0.25, 0.5, 1, 2, 3]
     for R in rs:
-        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'))
+        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k)
     # Create torus data
     rads = [(1, 1), (1, 2), (2, 1), (2, 2)]
     for inner_radius, outer_radius in rads:
-        create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'))
+        create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k)
     # Create euclidean data
     d = 3
     rad = 2
-    create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'))
+    create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k)
     # Create poincare data
     Rh = 1
     Ks = [-3, -2, -1, -0.5, -0.25]
     for K in Ks:
-        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'))
+        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k)
     # Create hyperbolic data
-    create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'))
+    create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k)
     return
 
 if __name__ == '__main__':
