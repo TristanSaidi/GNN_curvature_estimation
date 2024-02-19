@@ -1,23 +1,29 @@
 import torch
-from src.models.gnn import GCNRegressor
+from src.models.gnn import GCNRegressor, GATRegressor
 from src.datasets.dataset import ManifoldGraphDataset
 from torch_geometric.loader import DataLoader
 from torch.nn import functional as F
 from tensorboardX import SummaryWriter
 import os
 
-class GCNTrainer(object):
+architectures = {
+    'gcn': GCNRegressor,
+    'gat': GATRegressor
+}
+
+class GNNTrainer(object):
     def __init__(self, 
                  data_dir, 
                  save_dir,
                  exp_name, 
                  subgraph_k,
+                 architecture,
                  hidden_channels, # model hyperparameters
                  batch_size, 
                  learning_rate,
                  split, 
                  device):
-        super(GCNTrainer, self).__init__()
+        super(GNNTrainer, self).__init__()
         self.data_dir = data_dir
         self.save_dir = save_dir
         self.exp_name = exp_name
@@ -27,6 +33,7 @@ class GCNTrainer(object):
         os.makedirs(os.path.join(self.save_path, 'nn'), exist_ok=True)
         self.subgraph_k = subgraph_k
         self.hidden_channels = hidden_channels
+        self.architecture = architecture
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.split = split
@@ -48,7 +55,8 @@ class GCNTrainer(object):
         self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=True)
 
     def initialize_model(self):
-        self.model = GCNRegressor(num_node_features=self.num_node_features, hidden_channels=self.hidden_channels).to(self.device)
+        self.model = architectures[self.architecture](num_node_features=self.num_node_features, hidden_channels=self.hidden_channels).to(self.device)
+        print(f'Number of parameters in model: {self.model.get_num_params()}')
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
     
     def train(self, epochs):

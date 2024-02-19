@@ -1,7 +1,7 @@
 import argparse
 import torch
 import sys
-from src.trainers.gnn_trainer import GCNTrainer
+from src.trainers.gnn_trainer import GNNTrainer
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -21,6 +21,12 @@ def main() -> int:
         '--exp_name',
         default='gcn',
         help='name of experiment'
+    )
+    parser.add_argument(
+        '--architecture',
+        default='gcn',
+        choices=['gcn', 'gat'],
+        help='type of architecture to use'
     )
     parser.add_argument(
         '--hidden_channels',
@@ -78,7 +84,7 @@ def main() -> int:
     torch.manual_seed(configs.pop('seed'))
 
     epochs = configs.pop('epochs')
-    trainer = GCNTrainer(**configs)
+    trainer = GNNTrainer(**configs)
     trainer.train(epochs)
     return 0
 
