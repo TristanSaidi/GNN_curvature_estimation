@@ -5,6 +5,10 @@ from torch_geometric.loader import DataLoader
 from torch.nn import functional as F
 from tensorboardX import SummaryWriter
 import os
+import numpy as np
+from tqdm import tqdm
+from torch_geometric.data import Dataset, DataLoader
+from torch_geometric.utils import k_hop_subgraph
 
 architectures = {
     'gcn': GCNRegressor,
@@ -22,6 +26,7 @@ class GNNTrainer(object):
                  batch_size, 
                  learning_rate,
                  split, 
+                 manifold_split,
                  device):
         super(GNNTrainer, self).__init__()
         self.data_dir = data_dir
@@ -36,19 +41,53 @@ class GNNTrainer(object):
         self.architecture = architecture
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.split = split
-        self.device = device
+        # if random split
+        self.split = split # train/val split pctg
+        # if manifold split
+        self.manifold_split = manifold_split
 
+        self.device = device
         # setup logging
         self.train_writer = SummaryWriter(os.path.join(self.save_path, 'logs_train'))
         self.val_writer = SummaryWriter(os.path.join(self.save_path, 'logs_val'))
         # load data and 
-        self.load_data()
+        if self.manifold_split:
+            self.load_data_manifoldsplit()
+        else:
+            self.load_data_randsplit()
         # initialize model
         self.initialize_model()
 
-    def load_data(self):
-        dataset = ManifoldGraphDataset(self.data_dir, self.subgraph_k)
+    def load_data_manifoldsplit(self):
+        # load data and split into train and val by manifold
+        data_dir_train = os.path.join(self.data_dir, 'train')
+        data_dir_val = os.path.join(self.data_dir, 'val')
+        train_list = os.listdir(data_dir_train)
+        val_list = os.listdir(data_dir_val)
+        train_data = []
+        val_data = []
+        for file in train_list:
+            print(f'Loading file {file} for training...')
+            full_graph = torch.load(os.path.join(data_dir_train, file))
+            train_data.append(full_graph)
+        for file in val_list:
+            print(f'Loading file {file} for validation...')
+            full_graph = torch.load(os.path.join(data_dir_val, file))
+            val_data.append(full_graph)
+        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k)
+        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k)
+        self.num_node_features = train_dataset.num_node_features
+        self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=True)
+
+    def load_data_randsplit(self):
+        # load data and split into train and val randomly (pulling from all manifolds)
+        file_list = os.listdir(self.data_dir)
+        data = []
+        for file in file_list:
+            full_graph = torch.load(os.path.join(self.data_dir, file))
+            data.append(full_graph)
+        dataset = ManifoldGraphDataset(data, self.subgraph_k)
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
         self.train_loader = DataLoader(train_set, batch_size=self.batch_size, shuffle=True)
