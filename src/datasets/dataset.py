@@ -8,7 +8,7 @@ from tqdm import tqdm
 import numpy as np
 
 class ManifoldGraphDataset(Dataset):
-    def __init__(self, root, subgraph_k, subsample_pctg=0.2):
+    def __init__(self, root, subgraph_k, subsample_pctg=1.0):
         super(ManifoldGraphDataset, self).__init__()
         self.file_list = os.listdir(root)
         self.subgraph_k = subgraph_k
