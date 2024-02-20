@@ -59,6 +59,12 @@ def main() -> int:
         help='learning rate for optimizer'
     )
     parser.add_argument(
+        '--degree_features',
+        default=False,
+        type=bool,
+        help='whether to use degree features in GAT model'
+    )
+    parser.add_argument(
         '--split',
         default=0.8,
         type=float,

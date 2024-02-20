@@ -7,7 +7,8 @@ from tensorboardX import SummaryWriter
 import os
 import numpy as np
 from tqdm import tqdm
-from torch_geometric.data import Dataset, DataLoader
+from torch_geometric.data import Dataset
+from torch_geometric.loader import DataLoader
 from torch_geometric.utils import k_hop_subgraph
 
 architectures = {
@@ -23,6 +24,7 @@ class GNNTrainer(object):
                  subgraph_k,
                  architecture,
                  hidden_channels, # model hyperparameters
+                 degree_features,
                  batch_size, 
                  learning_rate,
                  split, 
@@ -39,6 +41,7 @@ class GNNTrainer(object):
         self.subgraph_k = subgraph_k
         self.hidden_channels = hidden_channels
         self.architecture = architecture
+        self.degree_features = degree_features
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         # if random split
@@ -94,7 +97,11 @@ class GNNTrainer(object):
         self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=True)
 
     def initialize_model(self):
-        self.model = architectures[self.architecture](num_node_features=self.num_node_features, hidden_channels=self.hidden_channels).to(self.device)
+        self.model = architectures[self.architecture](
+            num_node_features=self.num_node_features, 
+            hidden_channels=self.hidden_channels, 
+            degree_features=self.degree_features
+        ).to(self.device)
         print(f'Number of parameters in model: {self.model.get_num_params()}')
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
     
@@ -122,7 +129,7 @@ class GNNTrainer(object):
         for data in self.train_loader:
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            out = self.model(data.x.float(), data.edge_index, data.edge_attr.float(), data.batch)
+            out = self.model(data)
             loss = F.mse_loss(out, data.y.unsqueeze(1).float())
             loss.backward()
             running_loss += loss.item()
@@ -135,7 +142,7 @@ class GNNTrainer(object):
         with torch.no_grad():
             for data in self.val_loader:
                 data = data.to(self.device)
-                out = self.model(data.x.float(), data.edge_index, data.edge_attr.float(), data.batch)
+                out = self.model(data)
                 loss = F.mse_loss(out, data.y.unsqueeze(1).float())
                 running_loss += loss.item()
         return running_loss / len(self.val_loader)
