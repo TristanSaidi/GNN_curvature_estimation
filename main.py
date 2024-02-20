@@ -24,7 +24,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--architecture',
-        default='gcn',
+        default='gat',
         choices=['gcn', 'gat'],
         help='type of architecture to use'
     )
@@ -59,10 +59,22 @@ def main() -> int:
         help='learning rate for optimizer'
     )
     parser.add_argument(
+        '--degree_features',
+        default=False,
+        type=bool,
+        help='whether to use degree features in GAT model'
+    )
+    parser.add_argument(
         '--split',
         default=0.8,
         type=float,
         help='proportion of data to use for training'
+    )
+    parser.add_argument(
+        '--manifold_split',
+        default=False,
+        type=bool,
+        help='whether to split data by manifold'
     )
     parser.add_argument(
         '--seed',
