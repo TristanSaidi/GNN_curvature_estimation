@@ -33,7 +33,7 @@ class GCNRegressor(torch.nn.Module):
 	
 
 class GATRegressor(torch.nn.Module):
-	def __init__(self, num_node_features, hidden_channels, heads=2, dropout=0.5, degree_features=False):
+	def __init__(self, num_node_features, hidden_channels, heads=2, dropout=0.1, degree_features=False):
 		super(GATRegressor, self).__init__()
 		self.num_node_features = num_node_features if not degree_features else 1
 		self.degree_features = degree_features
