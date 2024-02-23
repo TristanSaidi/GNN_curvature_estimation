@@ -66,7 +66,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--num_layers',
-        default=5,
+        default=10,
         type=int,
         help='number of layers in model'
     )
