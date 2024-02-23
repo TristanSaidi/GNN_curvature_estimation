@@ -137,8 +137,7 @@ class GNNTrainer(object):
             data = data.to(self.device)
             self.optimizer.zero_grad()
             x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
-            edge_weights = torch.exp(-1*edge_attrs)
-            out = self.model(x=x, edge_index=edge_index, edge_weight=edge_weights, batch=batch)
+            out = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
             loss = F.mse_loss(out.squeeze(1), data.y.float())
             loss.backward()
             running_loss += loss.item()
@@ -152,8 +151,7 @@ class GNNTrainer(object):
             for data in self.val_loader:
                 data = data.to(self.device)
                 x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
-                edge_weights = torch.exp(-1*edge_attrs)
-                out = self.model(x=x, edge_index=edge_index, edge_weight=edge_weights, batch=batch)
+                out = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
                 loss = F.mse_loss(out.squeeze(1), data.y.float())
                 running_loss += loss.item()
         return running_loss / len(self.val_loader)
