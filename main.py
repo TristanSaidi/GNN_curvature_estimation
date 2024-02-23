@@ -42,7 +42,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--batch_size',
-        default=128,
+        default=32,
         type=int,
         help='mini-batch size used to train model'
     )
@@ -63,6 +63,18 @@ def main() -> int:
         default=False,
         type=bool,
         help='whether to use degree features in GAT model'
+    )
+    parser.add_argument(
+        '--num_layers',
+        default=5,
+        type=int,
+        help='number of layers in model'
+    )
+    parser.add_argument(
+        '--dropout',
+        default=0.1,
+        type=float,
+        help='dropout rate to use in model'
     )
     parser.add_argument(
         '--split',

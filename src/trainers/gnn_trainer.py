@@ -27,6 +27,8 @@ class GNNTrainer(object):
                  degree_features,
                  batch_size, 
                  learning_rate,
+                 num_layers,
+                 dropout,
                  split, 
                  manifold_split,
                  device):
@@ -40,6 +42,8 @@ class GNNTrainer(object):
         os.makedirs(os.path.join(self.save_path, 'nn'), exist_ok=True)
         self.subgraph_k = subgraph_k
         self.hidden_channels = hidden_channels
+        self.num_layers = num_layers
+        self.dropout = dropout
         self.architecture = architecture
         self.degree_features = degree_features
         self.batch_size = batch_size
@@ -77,8 +81,8 @@ class GNNTrainer(object):
             print(f'Loading file {file} for validation...')
             full_graph = torch.load(os.path.join(data_dir_val, file))
             val_data.append(full_graph)
-        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k)
-        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k)
+        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features)
+        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features)
         self.num_node_features = train_dataset.num_node_features
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=True)
@@ -88,21 +92,24 @@ class GNNTrainer(object):
         file_list = os.listdir(self.data_dir)
         data = []
         for file in file_list:
-            full_graph = torch.load(os.path.join(self.data_dir, file))
+            full_graph = torch.load(os.path.join(self.data_dir, file))['graph']
             data.append(full_graph)
-        dataset = ManifoldGraphDataset(data, self.subgraph_k)
+        dataset = ManifoldGraphDataset(data, self.subgraph_k, self.degree_features)
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
         self.train_loader = DataLoader(train_set, batch_size=self.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=True)
 
     def initialize_model(self):
+        in_channels = 11 if self.degree_features else self.num_node_features # degree can be {0,10}, thus 11 possible values for one-hot encoding
+        hidden_channels = self.hidden_channels
         self.model = architectures[self.architecture](
-            num_node_features=self.num_node_features, 
-            hidden_channels=self.hidden_channels, 
-            degree_features=self.degree_features
+            in_channels = in_channels,
+            hidden_channels = hidden_channels,
+            num_layers = self.num_layers,
+            dropout = self.dropout
         ).to(self.device)
-        print(f'Number of parameters in model: {self.model.get_num_params()}')
+        print(f'Number of parameters in model: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}')
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
     
     def train(self, epochs):
@@ -129,8 +136,10 @@ class GNNTrainer(object):
         for data in self.train_loader:
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            out = self.model(data)
-            loss = F.mse_loss(out, data.y.unsqueeze(1).float())
+            x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
+            edge_weights = torch.exp(-1*edge_attrs)
+            out = self.model(x=x, edge_index=edge_index, edge_weight=edge_weights, batch=batch)
+            loss = F.mse_loss(out.squeeze(1), data.y.float())
             loss.backward()
             running_loss += loss.item()
             self.optimizer.step()
@@ -142,7 +151,9 @@ class GNNTrainer(object):
         with torch.no_grad():
             for data in self.val_loader:
                 data = data.to(self.device)
-                out = self.model(data)
-                loss = F.mse_loss(out, data.y.unsqueeze(1).float())
+                x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
+                edge_weights = torch.exp(-1*edge_attrs)
+                out = self.model(x=x, edge_index=edge_index, edge_weight=edge_weights, batch=batch)
+                loss = F.mse_loss(out.squeeze(1), data.y.float())
                 running_loss += loss.item()
         return running_loss / len(self.val_loader)
