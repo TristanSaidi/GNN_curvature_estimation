@@ -75,11 +75,11 @@ class GNNTrainer(object):
         val_data = []
         for file in train_list:
             print(f'Loading file {file} for training...')
-            full_graph = torch.load(os.path.join(data_dir_train, file))
+            full_graph = torch.load(os.path.join(data_dir_train, file))['graph']
             train_data.append(full_graph)
         for file in val_list:
             print(f'Loading file {file} for validation...')
-            full_graph = torch.load(os.path.join(data_dir_val, file))
+            full_graph = torch.load(os.path.join(data_dir_val, file))['graph']
             val_data.append(full_graph)
         train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features)
         val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features)
