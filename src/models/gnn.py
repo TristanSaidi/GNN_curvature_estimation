@@ -17,6 +17,7 @@ class GCNRegressor(torch.nn.Module):
 	def forward(self, x, edge_index, edge_weight, batch):
 		for i in range(1, self.num_layers + 1):
 			x = F.relu(eval(f'self.conv{i}')(x, edge_index, edge_weight))
+			F.dropout(x, p=self.dropout, training=self.training)
 		x = global_mean_pool(x, batch)  # [batch_size, hidden_channels]
 		x = F.dropout(x, p=self.dropout, training=self.training)
 		x = self.lin(x)
