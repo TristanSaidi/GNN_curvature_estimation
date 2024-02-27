@@ -39,7 +39,7 @@ def create_sphere_dataset(R, N, d=2, k=10, features_max_k=2500, device='cpu', pa
     edge_list = torch.tensor(edge_list).to(device)
     edge_attrs = torch.tensor(edge_attrs).to(device)
     # Create node labels (scalar curvature in this case)
-    curvature = 2/(R ** 2)
+    curvature = (d)*(d-1)/(R ** 2)
     node_labels = np.ones((node_features.shape[0], 1)) * curvature
     if scale_labels:
         scaling_factors = []
@@ -344,20 +344,32 @@ def main():
     
     # Create 2-sphere data
     d = 2
-    rs = [1, 2] # curvatures = (2, 0.5)
+    rs = [0.5, 1, 1.5, 2]
     for R in rs:
         create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+    # Create 3-sphere data
+    # d = 3
+    # rs = [1, 2] # curvatures = (6, 1.5)
+    # for R in rs:
+    #     create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+    # # Create 5-sphere data
+    # d = 5
+    # rs = [3, 4] # curvatures = (20/9, 5/4)
+    # for R in rs:
+    #     create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # # Create torus data
     rads = [(1, 2)]
     for inner_radius, outer_radius in rads:
         create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # Create euclidean data
-    d = 2
     rad = 2
+    # ds = [2, 3, 4]
+    # for d in ds:
+    d = 2
     create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, features=features)
     # Create poincare data
     Rh = 1
-    Ks = [-2, -1]
+    Ks = [-5, -4, -3, -2, -1]
     for K in Ks:
         create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # Create hyperbolic data
