@@ -11,13 +11,18 @@ from gtda.graphs import KNeighborsGraph
 from scipy import sparse
 
 def get_features(d, X, features_max_k, pairwise_dists=None, feature_type='ball_ratios'):
-    assert feature_type in ['ball_ratios', 'nbr_distances']
+    assert feature_type in ['ball_ratios', 'nbr_distances', 'ball_volumes']
     sce = scalar_curvature_est(d, X, Rdist=pairwise_dists, verbose=True)
     v_i = [] # list of features for each vertex
     for i in range(X.shape[0]):
-        _, features = eval(f'sce.{feature_type}')(i, max_k=features_max_k)
+        data = eval(f'sce.{feature_type}')(i, max_k=features_max_k)
+        if feature_type == 'ball_ratios' or feature_type == 'ball_volumes':
+            _, features = data
+        if feature_type == 'nbr_distances':
+            features, _ = data
         v_i.append(features)
     v_i = np.array(v_i)
+    print(f'Feature shape: {v_i.shape}')
     return v_i, sce
 
 def adjmat_to_edgelist(adjmat):
@@ -164,7 +169,7 @@ def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path
     print(f'Creating poincare dataset with {N} nodes, curvature {K}, and radius {Rh}')
     X = manifold.PoincareDisk.sample(N=N, K=K, Rh=Rh)
     # data isn't embedded in euclidean space --> need to compute hyperbolic distances for kNN
-    pairwise_dists = manifold.PoincareDisk.Rdist_array(X)
+    pairwise_dists = manifold.PoincareDisk.Rdist_array(X, K=K)
     sparse_pairwise_dists = sparse.csr_matrix(pairwise_dists)
     knn_graph = KNeighborsGraph(n_neighbors=k, metric='precomputed')
     adjacency_mat = knn_graph.fit_transform([sparse_pairwise_dists])[0]
@@ -326,7 +331,7 @@ def main():
     argparser.add_argument(
         '--features',
         type=str,
-        choices=['ball_ratios', 'nbr_distances'],
+        choices=['ball_ratios', 'nbr_distances', 'ball_volumes'],
         help='node features to create'
     )
 
@@ -344,7 +349,8 @@ def main():
     
     # Create 2-sphere data
     d = 2
-    rs = [0.5, 1, 1.5, 2]
+    # rs = [2.82, 2, 1.633, 1.414, 1.265, 1.15, 1.069, 1] # curvatures [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    rs = [2.82, 2, 1.633, 1.414]
     for R in rs:
         create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # Create 3-sphere data
@@ -357,19 +363,20 @@ def main():
     # rs = [3, 4] # curvatures = (20/9, 5/4)
     # for R in rs:
     #     create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
-    # # Create torus data
+    # Create torus data
     rads = [(1, 2)]
     for inner_radius, outer_radius in rads:
         create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # Create euclidean data
-    rad = 2
+    rad = 1
     # ds = [2, 3, 4]
     # for d in ds:
     d = 2
     create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, features=features)
     # Create poincare data
     Rh = 1
-    Ks = [-5, -4, -3, -2, -1]
+    # Ks = [-0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75, -2.0]
+    Ks = [-0.25, -0.5, -0.75, -1.0]
     for K in Ks:
         create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
     # Create hyperbolic data
