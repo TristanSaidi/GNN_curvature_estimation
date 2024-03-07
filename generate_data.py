@@ -10,28 +10,29 @@ import argparse
 from gtda.graphs import KNeighborsGraph
 from scipy import sparse
 
-def get_features(d, X, features_max_k, pairwise_dists=None, feature_type='ball_ratios'):
-    assert feature_type in ['ball_ratios', 'nbr_distances', 'ball_volumes', 'e_radius']
-    sce = scalar_curvature_est(d, X, Rdist=pairwise_dists, verbose=True)
-    pairwise_dists = sce.Rdist
-    if feature_type == 'e_radius':
-        v_i = get_e_radius_features(features_max_k, pairwise_dists)
-        return v_i, sce
+def get_ball_ratio_features_rmax(X, sce, features_max_k, rmax=1):
+    r_values = np.linspace(0, rmax, features_max_k)
+    v_i = [] # list of ball ratios for each vertex
+    for i in range(X.shape[0]):
+        nbr_distances, ball_ratios = sce.ball_ratios(i, rmax=rmax)
+        # linearly space r values from 0 to rmax based on features_max_k
+        # for each r_value take the ball_volume of closest radius
+        ball_ratios = np.array([ball_ratios[np.argmin(np.abs(nbr_distances - r))] for r in r_values])
+        v_i.append(ball_ratios)
+    v_i = np.array(v_i)
+    return v_i
+
+def get_ball_ratio_features(X, sce, features_max_k):
     v_i = [] # list of features for each vertex
     for i in range(X.shape[0]):
-        data = eval(f'sce.{feature_type}')(i, max_k=features_max_k)
-        if feature_type == 'ball_ratios' or feature_type == 'ball_volumes':
-            _, features = data
-        if feature_type == 'nbr_distances':
-            features, _ = data
-        v_i.append(features)
+        _, ball_ratios = sce.ball_ratios(i=i, max_k=features_max_k)
+        v_i.append(ball_ratios)
     v_i = np.array(v_i)
-    return v_i, sce
+    return v_i
 
-
-def get_e_radius_features(features_max_k, pairwise_dists, max_epsilon=1):
+def get_e_radius_features(features_max_k, pairwise_dists, rmax):
     # create features_max_k bins from 0 to max_pairwise_dist
-    bins = np.linspace(0, max_epsilon, features_max_k+1)
+    bins = np.linspace(0, rmax, features_max_k+1)
     # for each vertex, compute number of elements in each bin
     v_i = []
     for i in range(pairwise_dists.shape[0]):
@@ -42,6 +43,38 @@ def get_e_radius_features(features_max_k, pairwise_dists, max_epsilon=1):
     v_i = np.array(v_i)
     return v_i
 
+def get_nbr_distance_features(X, sce, features_max_k):
+    v_i = [] # list of features for each vertex
+    for i in range(X.shape[0]):
+        features, _ = sce.nbr_distances(i=i, max_k=features_max_k)
+        v_i.append(features)
+    v_i = np.array(v_i)
+    return v_i
+
+def get_features(d, X, features_max_k, pairwise_dists=None, feature_type='ball_ratios', rmax=None):
+    assert feature_type in ['ball_ratios', 'nbr_distances', 'e_radius']
+    sce = scalar_curvature_est(n=d, X=X, Rdist=pairwise_dists, verbose=True)
+    pairwise_dists = sce.Rdist
+
+    # ball ratio features
+    if feature_type == 'ball_ratios':
+        if rmax is not None:
+            v_i = get_ball_ratio_features_rmax(X=X, sce=sce, features_max_k=features_max_k, rmax=rmax)
+            return v_i, sce
+        else:
+            v_i = get_ball_ratio_features(X=X, sce=sce, features_max_k=features_max_k)
+            return v_i, sce
+    
+    # e-rad features
+    if feature_type == 'e_radius':
+        assert rmax is not None, 'rmax must be specified for e_radius features'
+        v_i = get_e_radius_features(features_max_k=features_max_k, pairwise_dists=pairwise_dists, rmax=rmax)
+        return v_i, sce
+    
+    # nbr distance features
+    if feature_type == 'nbr_distances':
+        v_i = get_nbr_distance_features(X=X, sce=sce, features_max_k=features_max_k)
+        return v_i, sce
 
 def adjmat_to_edgelist(adjmat):
     rows, cols = adjmat.nonzero()
@@ -49,13 +82,13 @@ def adjmat_to_edgelist(adjmat):
     edge_attrs = np.array(adjmat[rows, cols]).T
     return edges, edge_attrs
 
-def create_sphere_dataset(R, N, d=2, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios'):
+def create_sphere_dataset(R, N, d=2, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios', rmax=None):
     print(f'Creating sphere dataset with {N} nodes, dimension {d}, and radius {R}')
     # Sample from manifold
     X = manifold.Sphere.sample(N, d, R=R)
     # Create nearest neighbors graph
     adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
-    node_features, sce = get_features(d, X, features_max_k, feature_type=features)
+    node_features, sce = get_features(d, X, features_max_k, feature_type=features, rmax=rmax)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -86,13 +119,13 @@ def create_sphere_dataset(R, N, d=2, k=10, features_max_k=2500, device='cpu', pa
         torch.save(data_dict, path)
     return sphere_data, X
 
-def create_torus_dataset(inner_radius, outer_radius, N, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios'):
+def create_torus_dataset(inner_radius, outer_radius, N, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios', rmax=None):
     print(f'Creating torus dataset with {N} nodes, inner radius {inner_radius}, and outer radius {outer_radius}')
     # Sample from manifold
     X, thetas = manifold.Torus.sample(N, inner_radius, outer_radius)
     # Create nearest neighbors graph
     adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
-    node_features, sce = get_features(2, X, features_max_k, feature_type=features)
+    node_features, sce = get_features(2, X, features_max_k, feature_type=features, rmax=rmax)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -123,12 +156,12 @@ def create_torus_dataset(inner_radius, outer_radius, N, k=10, features_max_k=250
     return torus_data, X
 
 
-def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu', path=None, features='ball_ratios'):
+def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu', path=None, features='ball_ratios', rmax=None):
     print(f'Creating euclidean dataset with {N} nodes, dimension {d}, and radius {rad}')
     # Sample from manifold
     X = manifold.Euclidean.sample(N, d, rad)
     adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
-    node_features, sce = get_features(d, X, features_max_k, feature_type=features)
+    node_features, sce = get_features(d, X, features_max_k, feature_type=features, rmax=rmax)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -153,7 +186,7 @@ def create_euclidean_dataset(N, d, rad, k=10, features_max_k=2500, device='cpu',
     return euclidean_data, X
 
 
-def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios'):
+def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios', rmax=None):
     print(f'Creating poincare dataset with {N} nodes, curvature {K}, and radius {Rh}')
     X = manifold.PoincareDisk.sample(N=N, K=K, Rh=Rh)
     # data isn't embedded in euclidean space --> need to compute hyperbolic distances for kNN
@@ -164,7 +197,7 @@ def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
 
     dim = 2
-    node_features, sce = get_features(dim, X, features_max_k, pairwise_dists, feature_type=features)
+    node_features, sce = get_features(dim, X, features_max_k, pairwise_dists, feature_type=features, rmax=rmax)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -194,11 +227,11 @@ def create_poincare_dataset(N, K, k, Rh, features_max_k=2500, device='cpu', path
         torch.save(data_dict, path)
     return poincare_data, X
 
-def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios'):
+def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=None, scale_labels=False, features='ball_ratios', rmax=None):
     print(f'Creating hyperbolic dataset with {N} nodes')
     X = manifold.Hyperboloid.sample(N)
     adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
-    node_features, sce = get_features(2, X, features_max_k, feature_type=features)
+    node_features, sce = get_features(2, X, features_max_k, feature_type=features, rmax=rmax)
     node_features = torch.tensor(node_features).to(device)
     # Convert adjacency matrix to edge list
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
@@ -227,8 +260,6 @@ def create_hyperbolic_dataset(N, k=10, features_max_k=2500, device='cpu', path=N
         }
         torch.save(data_dict, path)
     return hyperbolic_data, X
-
-
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -269,6 +300,10 @@ def main():
         choices=['ball_ratios', 'nbr_distances', 'ball_volumes', 'e_radius'],
         help='node features to create'
     )
+    argparser.add_argument(
+        '--rmax',
+        default=None,
+    )
 
     args = argparser.parse_args()
     output_dir = args.output_dir
@@ -278,6 +313,7 @@ def main():
     k = args.k # Number of neighbors
     features = args.features
     features_max_k = args.features_max_k # Maximum k for computing ball ratios
+    rmax = float(args.rmax) if args.rmax is not None else None
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -286,40 +322,27 @@ def main():
     d = 2
     rs = [2.82, 2, 1.633, 1.414, 1.265, 1.15, 1.069, 1] # curvatures [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
     for R in rs:
-        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     rs = [2.31, 1.032]
     for R in rs:
-        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
-    # Create 3-sphere data
-    # d = 3
-    # rs = [1, 2] # curvatures = (6, 1.5)
-    # for R in rs:
-    #     create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
-    # # # Create 5-sphere data
-    # # d = 5
-    # # rs = [3, 4] # curvatures = (20/9, 5/4)
-    # # for R in rs:
-    # #     create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
-    # # Create torus data
+        create_sphere_dataset(R, N, d, k, path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     # rads = [(1, 2)]
     # for inner_radius, outer_radius in rads:
-    #     create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+    #     create_torus_dataset(inner_radius, outer_radius, N, k, path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     # # Create euclidean data
-    # rad = 1
-    # # ds = [2, 3, 4]
-    # # for d in ds:
-    # d = 2
-    # create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, features=features)
+    rad = 2
+    d = 2
+    create_euclidean_dataset(N, d, rad, k, path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, features=features, rmax=rmax)
     # # Create poincare data
     Rh = 2
     Ks = [-0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75, -2.0]
     for K in Ks:
-        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_Rh_{Rh}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_Rh_{Rh}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     Ks = [-0.375, -1.875]
     for K in Ks:
-        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_Rh_{Rh}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+        create_poincare_dataset(N, K, k, Rh, path=os.path.join(output_dir, f'poincare_K_{K}_nodes_{N}_Rh_{Rh}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     # # Create hyperbolic data
-    # create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features)
+    # create_hyperbolic_dataset(N, k, path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), features_max_k=features_max_k, scale_labels=scale_labels, features=features, rmax=rmax)
     return
 
 if __name__ == '__main__':
