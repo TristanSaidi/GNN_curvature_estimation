@@ -11,16 +11,22 @@ class GCNRegressor(torch.nn.Module):
 		self.conv1 = GCNConv(in_channels, hidden_channels)
 		for i in range(2, num_layers + 1):
 			setattr(self, f'conv{i}', GCNConv(hidden_channels, hidden_channels))
-		self.lin = Linear(hidden_channels, 1) # regress to scalar curvature est for central vertex of graph
+		self.lin1 = Linear(hidden_channels, hidden_channels//2) # regress to scalar curvature est for central vertex of graph
+		self.lin2 = Linear(hidden_channels//2, hidden_channels//4)
+		self.lin3 = Linear(hidden_channels//4, 1)
 		self.dropout = dropout
 		
 	def forward(self, x, edge_index, edge_weight, batch):
 		for i in range(1, self.num_layers + 1):
-			x = F.relu(eval(f'self.conv{i}')(x, edge_index, edge_weight))
-			F.dropout(x, p=self.dropout, training=self.training)
+			x = eval(f'self.conv{i}')(x, edge_index, edge_weight)
+			x = F.relu(x)
 		x = global_mean_pool(x, batch)  # [batch_size, hidden_channels]
 		x = F.dropout(x, p=self.dropout, training=self.training)
-		x = self.lin(x)
+		x = self.lin1(x)
+		x = F.relu(x)
+		x = self.lin2(x)
+		x = F.relu(x)
+		x = self.lin3(x)
 		return x
 	
 	def get_num_params(self):
@@ -39,7 +45,7 @@ class GATRegressor(torch.nn.Module):
 
 	def forward(self, x, edge_index, edge_weight, batch):
 		for i in range(1, self.num_layers + 1):
-			x = F.relu(eval(f'self.conv{i}')(x, edge_index, edge_weight))
+			x = F.relu(eval(f'self.conv{i}')(x, edge_index=edge_index, edge_attr=edge_weight))
 		x = global_mean_pool(x, batch)
 		x = F.dropout(x, p=self.dropout, training=self.training)
 		x = self.lin(x)
