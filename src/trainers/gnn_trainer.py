@@ -82,7 +82,7 @@ class GNNTrainer(object):
             full_graph = torch.load(os.path.join(data_dir_val, file))
             val_data[file] = full_graph
         train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5)
-        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features)
+        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05)
 
         self.num_node_features = train_dataset.num_node_features
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
