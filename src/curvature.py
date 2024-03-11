@@ -129,7 +129,7 @@ class scalar_curvature_est:
             self.N = Rdist.shape[0]
             
         if Rdist is None:
-            self.Rdist = scalar_curvature_est.compute_Rdist(X, n_nbrs)
+            self.Rdist, self.iso = scalar_curvature_est.compute_Rdist(X, n_nbrs)
             if verbose: print("computed Rdist")
         else:
             self.Rdist = Rdist
@@ -281,7 +281,7 @@ class scalar_curvature_est:
         iso = Isomap(n_neighbors = n_nbrs, n_jobs = -1)
         iso.fit(X)
         Rdist = iso.dist_matrix_
-        return Rdist
+        return Rdist, iso
     
     def estimate(self, rmax, indices = None, rmin = None, version = 2, with_error = False, avg_k = 0):
         # TO DO- parallelize and allow different rmaxes for each point
