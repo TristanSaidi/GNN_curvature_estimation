@@ -7,7 +7,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 from torch_geometric.utils import degree
-from torch_geometric.transforms import OneHotDegree
+from torch_geometric.transforms import OneHotDegree, GDC
 from torch_geometric.utils import dropout_node
 from src.utils import StandardScalerTorch
 import src.manifold as manifold
@@ -26,9 +26,6 @@ class ManifoldGraphDataset(Dataset):
 
     def prepare_data(self):
         data_list = []
-        # save node features and labels separately to create scaler
-        node_features = []
-        labels = []
         # iterate through full graphs
         for (name, data) in self.full_graphs.items():
             full_graph = data['graph']
@@ -86,6 +83,7 @@ class ManifoldGraphDataset(Dataset):
 
             nodes_in_subgraph = []
             edges_in_subgraph = []
+            subgraph_node_indices = [] # store node masks for each subgraph
             for idx in tqdm(indices, desc=f'Processing new graph: {name}'):
                 subgraph_nodes, subgraph_edges, inv, edge_mask = k_hop_subgraph(idx, self.subgraph_k, full_graph.edge_index.transpose(0,1).long(), relabel_nodes=True, directed=False)
                 edge_indices = edge_mask.clone().nonzero(as_tuple=False)
@@ -93,6 +91,8 @@ class ManifoldGraphDataset(Dataset):
                     edge_indices = edge_indices.squeeze(1)
                 edge_attrs = full_graph.edge_attr[edge_indices].clone()
                 x = full_graph.x[subgraph_nodes].clone()
+                # store node indices
+                subgraph_node_indices.append(subgraph_nodes)
                 nodes_in_subgraph.append(x.shape[0])
                 edges_in_subgraph.append(edge_attrs.shape[0])
                 # convert edge attributes to indicator of presence of edge
@@ -100,13 +100,10 @@ class ManifoldGraphDataset(Dataset):
                 if self.degree_features:
                     subgraph = self.one_hot_transform(subgraph)
                 data_list.append(subgraph)
-                node_features.append(subgraph.x.clone())
-                labels.append(subgraph.y.clone())
+            self.subgraph_node_indices = subgraph_node_indices
             print(f'Average num of nodes in subgraph: {sum(nodes_in_subgraph)/len(nodes_in_subgraph)}')
             print(f'Average num of edges in subgraph: {sum(edges_in_subgraph)/len(edges_in_subgraph)}\n')
         
-        node_features = torch.cat(node_features, dim=0)
-        labels = torch.cat(labels, dim=0)
         self.data = data_list
 
     def len(self):
