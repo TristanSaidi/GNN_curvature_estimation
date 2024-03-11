@@ -1,16 +1,17 @@
 import torch
 import torch.nn.functional as F
-from torch.nn import Linear
-from torch_geometric.nn import GCNConv, GATConv, global_mean_pool, Sequential
+from torch.nn import Linear, Sequential
+from torch_geometric.nn import GCNConv, GATConv, global_mean_pool
 from torch_geometric.utils import degree
+
 
 class GCNRegressor(torch.nn.Module):
 	def __init__(self, in_channels, hidden_channels, num_layers, dropout):
 		super(GCNRegressor, self).__init__()
 		self.num_layers = num_layers
-		self.conv1 = GCNConv(in_channels, hidden_channels)
+		self.conv1 = GCNConv(in_channels, hidden_channels, normalize=False)
 		for i in range(2, num_layers + 1):
-			setattr(self, f'conv{i}', GCNConv(hidden_channels, hidden_channels))
+			setattr(self, f'conv{i}', GCNConv(hidden_channels, hidden_channels, normalize=False))
 		self.lin1 = Linear(hidden_channels, hidden_channels//2) # regress to scalar curvature est for central vertex of graph
 		self.lin2 = Linear(hidden_channels//2, hidden_channels//4)
 		self.lin3 = Linear(hidden_channels//4, 1)
@@ -32,6 +33,7 @@ class GCNRegressor(torch.nn.Module):
 	def get_num_params(self):
 		return sum(p.numel() for p in self.parameters() if p.requires_grad)
 	
+
 
 class GATRegressor(torch.nn.Module):
 	def __init__(self, in_channels, hidden_channels, num_layers, dropout, heads=1):
