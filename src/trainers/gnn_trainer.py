@@ -71,18 +71,19 @@ class GNNTrainer(object):
         data_dir_val = os.path.join(self.data_dir, 'val')
         train_list = os.listdir(data_dir_train)
         val_list = os.listdir(data_dir_val)
-        train_data = []
-        val_data = []
+        train_data = {}
+        val_data = {}
         for file in train_list:
             print(f'Loading file {file} for training...')
-            full_graph = torch.load(os.path.join(data_dir_train, file))['graph']
-            train_data.append(full_graph)
+            full_graph = torch.load(os.path.join(data_dir_train, file))
+            train_data[file] = full_graph
         for file in val_list:
             print(f'Loading file {file} for validation...')
-            full_graph = torch.load(os.path.join(data_dir_val, file))['graph']
-            val_data.append(full_graph)
-        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features)
-        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features)
+            full_graph = torch.load(os.path.join(data_dir_val, file))
+            val_data[file] = full_graph
+        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5)
+        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05)
+
         self.num_node_features = train_dataset.num_node_features
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_dataset, batch_size=self.batch_size, shuffle=True)
@@ -90,18 +91,19 @@ class GNNTrainer(object):
     def load_data_randsplit(self):
         # load data and split into train and val randomly (pulling from all manifolds)
         file_list = os.listdir(self.data_dir)
-        data = []
+        data = {}
         for file in file_list:
-            full_graph = torch.load(os.path.join(self.data_dir, file))['graph']
-            data.append(full_graph)
+            full_graph = torch.load(os.path.join(self.data_dir, file))
+            data[file] = full_graph
         dataset = ManifoldGraphDataset(data, self.subgraph_k, self.degree_features)
+
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
         self.train_loader = DataLoader(train_set, batch_size=self.batch_size, shuffle=True)
         self.val_loader = DataLoader(val_set, batch_size=self.batch_size, shuffle=True)
 
     def initialize_model(self):
-        in_channels = 11 if self.degree_features else self.num_node_features # degree can be {0,10}, thus 11 possible values for one-hot encoding
+        in_channels = self.num_node_features
         hidden_channels = self.hidden_channels
         self.model = architectures[self.architecture](
             in_channels = in_channels,
@@ -116,19 +118,24 @@ class GNNTrainer(object):
         val_loss_min = float('inf')
         for epoch in range(epochs):
             train_loss = self.train_epoch()
+            print(f'Epoch {epoch}: Training loss: {train_loss}')
             val_loss = self.eval()
             # log training and validation loss
             self.train_writer.add_scalar('Loss', train_loss, epoch)
             self.val_writer.add_scalar('Loss', val_loss, epoch)
             if val_loss < val_loss_min:
                 print(f'Epoch {epoch}: Validation loss decreased ({val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-                self.save(self.model.state_dict())
+                self.save()
                 val_loss_min = val_loss
             else:
                 print(f'Epoch {epoch}: Validation loss: {val_loss}')
 
-    def save(self, state_dict):
-        torch.save(state_dict, os.path.join(self.save_path, 'nn/best_val.pt'))
+    def save(self):
+        state_dict = self.model.state_dict()
+        save_dict = {
+            "model": state_dict,
+        }
+        torch.save(save_dict, os.path.join(self.save_path, 'nn/best_val.pt'))
 
     def train_epoch(self):
         self.model.train()
@@ -136,9 +143,11 @@ class GNNTrainer(object):
         for data in self.train_loader:
             data = data.to(self.device)
             self.optimizer.zero_grad()
-            x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
-            out = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
-            loss = F.mse_loss(out.squeeze(1), data.y.float())
+            x, edge_index, edge_attrs, batch, y = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch, data.y.float()
+            # forward pass
+            y_hat = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
+            # loss
+            loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
             loss.backward()
             running_loss += loss.item()
             self.optimizer.step()
@@ -150,8 +159,11 @@ class GNNTrainer(object):
         with torch.no_grad():
             for data in self.val_loader:
                 data = data.to(self.device)
-                x, edge_index, edge_attrs, batch = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch
-                out = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
-                loss = F.mse_loss(out.squeeze(1), data.y.float())
+                x, edge_index, edge_attrs, batch, y = data.x.float(), data.edge_index, data.edge_attr.float(), data.batch, data.y.float()
+                # scale input and output
+                # forward pass
+                y_hat = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
+                # reverse scaling
+                loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
                 running_loss += loss.item()
         return running_loss / len(self.val_loader)

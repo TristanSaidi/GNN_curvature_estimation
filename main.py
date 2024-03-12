@@ -24,13 +24,13 @@ def main() -> int:
     )
     parser.add_argument(
         '--architecture',
-        default='gat',
+        default='gcn',
         choices=['gcn', 'gat'],
         help='type of architecture to use'
     )
     parser.add_argument(
         '--hidden_channels',
-        default=256,
+        default=100,
         type=int,
         help='number of hidden channels in model'
     )
@@ -48,13 +48,13 @@ def main() -> int:
     )
     parser.add_argument(
         '--subgraph_k',
-        default=1,
+        default=5,
         type=int,
         help='number of hops to use in constructing subgraphs'
     )
     parser.add_argument(
         '--learning_rate',
-        default=1e-5,
+        default=1e-4,
         type=float,
         help='learning rate for optimizer'
     )
@@ -66,7 +66,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--num_layers',
-        default=10,
+        default=5,
         type=int,
         help='number of layers in model'
     )
@@ -80,11 +80,11 @@ def main() -> int:
         '--split',
         default=0.8,
         type=float,
-        help='proportion of data to use for training'
+        help='proportion of data to use for training (only used if manifold_split is False)'
     )
     parser.add_argument(
         '--manifold_split',
-        default=False,
+        default=True,
         type=bool,
         help='whether to split data by manifold'
     )
