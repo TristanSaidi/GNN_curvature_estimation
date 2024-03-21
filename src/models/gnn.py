@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from torch.nn import Linear, Sequential
 from torch_geometric.nn import GCNConv, GATConv, global_mean_pool
 from torch_geometric.utils import degree
+from torch_geometric.utils import dropout_edge, dropout_node
 
 
 class GCNRegressor(torch.nn.Module):
@@ -18,6 +19,10 @@ class GCNRegressor(torch.nn.Module):
 		self.dropout = dropout
 		
 	def forward(self, x, edge_index, edge_weight, batch):
+		# dropout edges
+		edge_index, edge_mask = dropout_edge(edge_index, p=0.1, training=self.training)
+		edge_weight = edge_weight[edge_mask]
+
 		for i in range(1, self.num_layers + 1):
 			x = eval(f'self.conv{i}')(x, edge_index, edge_weight)
 			x = F.relu(x)
