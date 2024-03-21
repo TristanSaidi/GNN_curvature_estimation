@@ -22,6 +22,8 @@ class GNNTrainer(object):
                  save_dir,
                  exp_name, 
                  subgraph_k,
+                 scale_features,
+                 edge_attrs,
                  architecture,
                  hidden_channels, # model hyperparameters
                  degree_features,
@@ -41,6 +43,11 @@ class GNNTrainer(object):
         os.makedirs(self.save_path, exist_ok=True)
         os.makedirs(os.path.join(self.save_path, 'nn'), exist_ok=True)
         self.subgraph_k = subgraph_k
+        self.scale_features = scale_features
+        print(f'Scaling features: {self.scale_features}')
+        assert not ('nbr_distances' not in self.data_dir and self.scale_features), 'Cannot scale features if not using nbr_distances'
+        self.edge_attrs = edge_attrs
+
         self.hidden_channels = hidden_channels
         self.num_layers = num_layers
         self.dropout = dropout
@@ -81,8 +88,8 @@ class GNNTrainer(object):
             print(f'Loading file {file} for validation...')
             full_graph = torch.load(os.path.join(data_dir_val, file))
             val_data[file] = full_graph
-        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5)
-        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05)
+        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
+        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
 
         self.num_node_features = train_dataset.num_node_features
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
@@ -95,7 +102,7 @@ class GNNTrainer(object):
         for file in file_list:
             full_graph = torch.load(os.path.join(self.data_dir, file))
             data[file] = full_graph
-        dataset = ManifoldGraphDataset(data, self.subgraph_k, self.degree_features)
+        dataset = ManifoldGraphDataset(data, self.subgraph_k, self.degree_features, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
 
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
@@ -112,7 +119,7 @@ class GNNTrainer(object):
             dropout = self.dropout
         ).to(self.device)
         print(f'Number of parameters in model: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}')
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=0.001)
     
     def train(self, epochs):
         val_loss_min = float('inf')
