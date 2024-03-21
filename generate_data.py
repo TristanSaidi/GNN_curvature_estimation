@@ -44,14 +44,12 @@ def get_e_radius_features(N, sce, features_max_k, rmax):
     v_i = np.array(v_i)
     return v_i
 
-def get_nbr_distance_features(N, sce, features_max_k, scale=False):
+def get_nbr_distance_features(N, sce, features_max_k):
     v_i = [] # list of features for each vertex
     for i in range(N):
         features, _ = sce.nbr_distances(i=i, max_k=features_max_k)
         v_i.append(features)
     v_i = np.array(v_i)
-    if scale:
-        v_i = v_i / v_i[:, -1][:, None]
     return v_i
 
 def get_features(sce, N, features_max_k, feature_type='ball_ratios', rmax=None):
@@ -87,8 +85,8 @@ def adjmat_to_edgelist(adjmat):
 def create_sphere_dataset(
         R, 
         N, 
+        k, 
         d=2, 
-        k=10, 
         features_max_k=2500, 
         device='cpu', 
         path=None, 
@@ -131,7 +129,7 @@ def create_torus_dataset(
         inner_radius, 
         outer_radius, 
         N, 
-        k=10, 
+        k, 
         features_max_k=2500, 
         device='cpu', 
         path=None, 
@@ -173,7 +171,7 @@ def create_euclidean_dataset(
         N, 
         d, 
         rad, 
-        k=10, 
+        k, 
         features_max_k=2500, 
         device='cpu', 
         path=None, 
@@ -256,10 +254,9 @@ def create_poincare_dataset(
     return poincare_data, X
 
 
-
 def create_hyperbolic_dataset(
         N, 
-        k=10, 
+        k, 
         features_max_k=2500, 
         device='cpu', 
         path=None, 
@@ -294,6 +291,48 @@ def create_hyperbolic_dataset(
         }
         torch.save(data_dict, path)
     return hyperbolic_data, X
+
+
+def create_paraboloid_dataset(
+        N, 
+        k, 
+        a,
+        b,
+        features_max_k=2500, 
+        device='cpu', 
+        path=None, 
+        features='ball_ratios', 
+        rmax=None
+    ):
+    print(f'Creating paraboloid dataset with {N} nodes')
+    assert a > 0 and b < 0, 'a must be positive and b must be negative for paraboloid to be a saddle surface'
+    X, ks = manifold.paraboloid(n=N, a=a, b=b)
+    sce = scalar_curvature_est(n=2, X=X, n_nbrs=k, Rdist=None, verbose=True)
+    # grab adjacency matrix for kNN graph
+    adjacency_mat = neighbors.kneighbors_graph(X, n_neighbors=k, mode='distance', include_self=False)
+    # Convert adjacency matrix to edge list
+    edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
+    edge_list = torch.tensor(edge_list).to(device)
+    edge_attrs = torch.tensor(edge_attrs).to(device)
+    # get node features
+    node_features, _ = get_features(sce=sce, N=N, features_max_k=features_max_k, feature_type=features, rmax=rmax)
+    node_features = torch.tensor(node_features).to(device)
+    # Create node labels (scalar curvature in this case)
+    node_labels = torch.tensor(ks).unsqueeze(1).to(device)
+    assert edge_list.shape == (N*k, 2)
+    assert edge_attrs.shape == (N*k,1)
+    assert node_labels.shape == (N,1)
+
+    paraboloid_data = Data(x=node_features, edge_index=edge_list, edge_attr=edge_attrs, y=node_labels)
+    if path is not None:
+        data_dict = {
+            "coords" : X,
+            "graph" : paraboloid_data
+        }
+        torch.save(data_dict, path)
+    return paraboloid_data, X
+
+
 
 def main():
     argparser = argparse.ArgumentParser(
@@ -354,8 +393,8 @@ def main():
         create_sphere_dataset(
             R=R, 
             N=N, 
-            d=d, 
             k=k, 
+            d=d, 
             path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
             features_max_k=features_max_k, 
             features=features, 
@@ -366,8 +405,8 @@ def main():
         create_sphere_dataset(
             R=R, 
             N=N, 
-            d=d, 
             k=k, 
+            d=d, 
             path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
             features_max_k=features_max_k, 
             features=features, 
@@ -385,7 +424,7 @@ def main():
             features=features, 
             rmax=rmax
         )
-    # # Create euclidean data
+    # Create euclidean data
     rad = 1
     d = 2
     create_euclidean_dataset(
@@ -398,7 +437,7 @@ def main():
         features=features, 
         rmax=rmax
     )
-    # # Create poincare data
+    # Create poincare data
     Rh = 2
     Ks = [-0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75, -2.0]
     for K in Ks:
@@ -429,6 +468,20 @@ def main():
         N=N, 
         k=k, 
         path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), 
+        features_max_k=features_max_k, 
+        features=features, 
+        rmax=rmax
+    )
+
+    # create paraboloid data
+    a = 1
+    b = -1
+    create_paraboloid_dataset(
+        N=N, 
+        k=k, 
+        a=a, 
+        b=b, 
+        path=os.path.join(output_dir, f'paraboloid_nodes_a_{a}_b_{b}_{N}_k_{k}.pt'), 
         features_max_k=features_max_k, 
         features=features, 
         rmax=rmax
