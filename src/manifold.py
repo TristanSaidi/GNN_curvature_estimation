@@ -350,3 +350,51 @@ def plot_3d(X, vals = None, s = None):
     set_axes_equal(ax)
     fig.colorbar(p)
     plt.show()
+
+
+
+##############################################################################
+# Paraboloid sampling
+##############################################################################
+
+def rejection_sample_for_saddle(n,a,b):
+    x = np.random.random(n)*2 - 1 # random values in -1, 1
+    y = np.random.random(n)*2 - 1
+    fx = np.sqrt(4*a**2*x**2 + 4*b**2*y**2 + 1)
+    yvec = np.random.random(n) * (1/np.max(fx))
+    return x[yvec < fx], y[yvec < fx]
+
+def paraboloid(n=5000,a=1,b=-1, seed=None, use_guide_points = False):
+    """Sample roughly n points on a saddle, using rejection sampling for even density coverage
+    Defined by $ax^2 + by^2$. 
+
+    Parameters
+    ----------
+    n : int, optional
+        number of points, by default 2000
+    a : int, optional
+        ellipsoid param1, by default 1
+    b : int, optional
+        ellipsoid param2, by default -1
+    seed : int, optional
+        For repeatability, seed the randomness, by default None
+
+    Returns
+    -------
+    The sampled points, and the curvatures of each point
+    """
+    if use_guide_points:
+        n = n - 1
+    np.random.seed(seed)
+    x, y = rejection_sample_for_saddle(n,a,b)
+    if use_guide_points:
+        x = np.concatenate([[0],x])
+        y = np.concatenate([[0],y])
+    data = np.zeros((len(x), 3))
+    data[:, 0] = x
+    data[:, 1] = y
+    data[:, 2] = a*x**2 + b*y**2
+    # compute curvature of sampled saddle region
+    ks = -(4*a**6 * b**6)/(a**4*b**4 + 4*b**4*x**2+4*a**4*y**2)**2
+    
+    return data, ks
