@@ -59,6 +59,15 @@ def main() -> int:
         help='learning rate for optimizer'
     )
     parser.add_argument(
+        '--scale_features',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--edge_attrs',
+        default='distance',
+        choices=['distance', 'connectivity', 'affinity'],
+    )
+    parser.add_argument(
         '--degree_features',
         default=False,
         type=bool,
@@ -103,7 +112,6 @@ def main() -> int:
 
     args = parser.parse_args()
     configs = args.__dict__
-
     # for repeatability
     torch.manual_seed(configs.pop('seed'))
 
