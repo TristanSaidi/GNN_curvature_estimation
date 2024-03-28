@@ -6,7 +6,12 @@ from src.trainers.gnn_trainer import GNNTrainer
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Train a GNN to predict scalar curvature')
-
+    parser.add_argument(
+        '--task',
+        default='regression',
+        choices=['regression', 'classification'],
+        help='type of task to perform'
+    )
     parser.add_argument(
         '--data_dir',
         default='data',
