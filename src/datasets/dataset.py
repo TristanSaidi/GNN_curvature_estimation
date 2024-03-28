@@ -16,8 +16,9 @@ from termcolor import cprint
 # from torch_geometric.utils import dropout_adj, dropout_node
 
 class ManifoldGraphDataset(Dataset):
-    def __init__(self, full_graphs, subgraph_k, degree_features, subsample_pctg=0.05, avoid_boundary=True, scale_features=False, edge_attrs="distance"):
+    def __init__(self, task, full_graphs, subgraph_k, degree_features, subsample_pctg=0.05, avoid_boundary=True, scale_features=False, edge_attrs="distance"):
         super(ManifoldGraphDataset, self).__init__()
+        self.task = task
         self.subgraph_k = subgraph_k
         self.subsample_pctg = subsample_pctg
         self.full_graphs = full_graphs
@@ -33,6 +34,11 @@ class ManifoldGraphDataset(Dataset):
 
     def prepare_data(self):
         data_list = []
+        # get list of lengths of full graphs
+        lengths = [data['graph'].x.shape[0] for data in self.full_graphs.values()]
+        # get min length
+        min_len = min(lengths)
+        print(f'Taking {min_len} nodes from each graph')
         # iterate through full graphs
         for (name, data) in self.full_graphs.items():
             full_graph = data['graph']
@@ -42,9 +48,9 @@ class ManifoldGraphDataset(Dataset):
             X = data['coords']
             # choose random subset of indices for constructing subgraphs
             if self.subsample_pctg < 1:
-                indices = np.random.choice(full_graph.x.shape[0], int(self.subsample_pctg * full_graph.x.shape[0]), replace=False).tolist()
+                indices = np.random.choice(min_len, int(self.subsample_pctg * min_len), replace=False).tolist()
             else:
-                indices = list(range(full_graph.x.shape[0]))
+                indices = list(range(min_len))
 
             # if we are dealing with Poincare disks, we want to ignore nodes too close to the boundary
             if 'poincare' in name and self.avoid_boundary:
@@ -109,7 +115,7 @@ class ManifoldGraphDataset(Dataset):
                     edge_attrs = torch.exp(-full_graph.edge_attr[edge_indices].clone()).float()
                 
                 x = full_graph.x[subgraph_nodes].clone()
-                y = full_graph.y[idx].clone()
+                curvature = full_graph.y[idx].clone()
                 # store node indices
                 subgraph_node_indices.append(subgraph_nodes)
                 nodes_in_subgraph.append(x.shape[0])
@@ -124,7 +130,19 @@ class ManifoldGraphDataset(Dataset):
                     # scale features
                     x = x / scale
                     # scale labels
-                    y = y / (scale ** 2)
+                    curvature = curvature / (scale ** 2)
+                
+                if self.task == 'classification':
+                    # y stores class indices
+                    y = torch.tensor([0], dtype=torch.int)
+                    if curvature < 0:
+                        y = torch.tensor([0], dtype=torch.int)
+                    elif curvature == 0:
+                        y = torch.tensor([1], dtype=torch.int)
+                    else:
+                        y = torch.tensor([2], dtype=torch.int)
+                elif self.task == 'regression':
+                    y = curvature
 
                 subgraph = Data(x=x, edge_index=subgraph_edges, edge_attr=edge_attrs, y=y, scale=scale)
                 if self.degree_features:
