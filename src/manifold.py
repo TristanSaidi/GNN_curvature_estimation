@@ -53,6 +53,9 @@ class Sphere:
         m = n+1
         Sn = (2*(math.pi)**(m/2))/gamma(m/2)
         return Sn
+    
+    def S2_area(R):
+        return 4 * math.pi * R**2
 
 
 ##############################################################################
@@ -101,6 +104,9 @@ class Euclidean:
                 D[j, i] = D[i, j]
         return D
     
+    def R2_area(r):
+        return math.pi*r**2
+    
 ##############################################################################
 # Torus sampling
 ##############################################################################
@@ -142,6 +148,9 @@ class Torus:
         # Returns index in thetas of the angle closest to theta
         err = [abs(theta_ - theta) for theta_ in thetas]
         return np.argmin(err)
+    
+    def area(r, R):
+        return (2 * math.pi * r) * (2 * math.pi * R)
     
 ##############################################################################
 # Poincare disk sampling
