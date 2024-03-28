@@ -1,5 +1,5 @@
 import torch
-from src.models.gnn import GCNRegressor, GATRegressor
+from src.models.gnn import GCNRegressor, GATRegressor, GCNClassifier
 from src.datasets.dataset import ManifoldGraphDataset
 from torch_geometric.loader import DataLoader
 from torch.nn import functional as F
@@ -13,6 +13,7 @@ from torch_geometric.utils import k_hop_subgraph
 
 architectures = {
     'gcn': GCNRegressor,
+    'gcn_clf': GCNClassifier,
     'gat': GATRegressor
 }
 
@@ -21,6 +22,7 @@ class GNNTrainer(object):
                  data_dir, 
                  save_dir,
                  exp_name, 
+                 task,
                  subgraph_k,
                  scale_features,
                  edge_attrs,
@@ -35,6 +37,9 @@ class GNNTrainer(object):
                  manifold_split,
                  device):
         super(GNNTrainer, self).__init__()
+        self.task = task
+        assert self.task in ['regression', 'classification']
+
         self.data_dir = data_dir
         self.save_dir = save_dir
         self.exp_name = exp_name
@@ -51,7 +56,7 @@ class GNNTrainer(object):
         self.hidden_channels = hidden_channels
         self.num_layers = num_layers
         self.dropout = dropout
-        self.architecture = architecture
+        self.architecture = 'gcn_clf' if self.task == 'classification' else architecture
         self.degree_features = degree_features
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -88,8 +93,8 @@ class GNNTrainer(object):
             print(f'Loading file {file} for validation...')
             full_graph = torch.load(os.path.join(data_dir_val, file))
             val_data[file] = full_graph
-        train_dataset = ManifoldGraphDataset(train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
-        val_dataset = ManifoldGraphDataset(val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
+        train_dataset = ManifoldGraphDataset(self.task, train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
+        val_dataset = ManifoldGraphDataset(self.task, val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
 
         self.num_node_features = train_dataset.num_node_features
         self.train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
@@ -102,7 +107,7 @@ class GNNTrainer(object):
         for file in file_list:
             full_graph = torch.load(os.path.join(self.data_dir, file))
             data[file] = full_graph
-        dataset = ManifoldGraphDataset(data, self.subgraph_k, self.degree_features, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
+        dataset = ManifoldGraphDataset(self.task, data, self.subgraph_k, self.degree_features, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
 
         self.num_node_features = dataset.num_node_features
         train_set, val_set = torch.utils.data.random_split(dataset, [int(len(dataset)*self.split), len(dataset) - int(len(dataset)*self.split)])
@@ -123,19 +128,19 @@ class GNNTrainer(object):
     
     def train(self, epochs):
         val_loss_min = float('inf')
-        for epoch in range(epochs):
-            train_loss = self.train_epoch()
-            print(f'Epoch {epoch}: Training loss: {train_loss}')
-            val_loss = self.eval()
-            # log training and validation loss
-            self.train_writer.add_scalar('Loss', train_loss, epoch)
-            self.val_writer.add_scalar('Loss', val_loss, epoch)
-            if val_loss < val_loss_min:
-                print(f'Epoch {epoch}: Validation loss decreased ({val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-                self.save()
-                val_loss_min = val_loss
-            else:
-                print(f'Epoch {epoch}: Validation loss: {val_loss}')
+        with tqdm(total=epochs) as pbar:
+            for epoch in range(epochs):
+                train_loss = self.train_epoch()
+                val_loss, acc = self.eval()
+                # log training and validation loss
+                self.train_writer.add_scalar('Loss', train_loss, epoch)
+                self.val_writer.add_scalar('Loss', val_loss, epoch)
+                self.val_writer.add_scalar('Accuracy', acc, epoch)
+                if val_loss < val_loss_min:
+                    self.save()
+                    val_loss_min = val_loss
+                pbar.set_postfix_str(f'Min val loss: {val_loss:.2f}, Val acc: {acc:.2f}, Train loss: {train_loss:.2f}')
+                pbar.update(1)
 
     def save(self):
         state_dict = self.model.state_dict()
@@ -154,7 +159,12 @@ class GNNTrainer(object):
             # forward pass
             y_hat = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
             # loss
-            loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
+            if self.task == 'classification':
+                # in this case, y contains class indices
+                loss = F.cross_entropy(y_hat, y.long())
+            elif self.task == 'regression':
+                # in this case, y contains scalar values
+                loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
             loss.backward()
             running_loss += loss.item()
             self.optimizer.step()
@@ -163,6 +173,10 @@ class GNNTrainer(object):
     def eval(self):
         self.model.eval()
         running_loss = 0.0
+        
+        # accuracy logging for classification task
+        correct = 0
+        total = 0
         with torch.no_grad():
             for data in self.val_loader:
                 data = data.to(self.device)
@@ -170,7 +184,20 @@ class GNNTrainer(object):
                 # scale input and output
                 # forward pass
                 y_hat = self.model(x=x, edge_index=edge_index, edge_weight=edge_attrs, batch=batch)
-                # reverse scaling
-                loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
+
+                if self.task == 'classification':
+                    # in this case, y contains class indices
+                    loss = F.cross_entropy(y_hat, y.long())
+                    # compute accuracy
+                    _, preds = torch.max(y_hat, 1)
+                    correct = (preds == y).sum().item()
+                    total = y.size(0)
+                    # update correct and total
+                    correct += correct
+                    total += total
+                elif self.task == 'regression':
+                    # in this case, y contains scalar values
+                    loss = F.mse_loss(y_hat.squeeze(1), y, reduction='mean')
                 running_loss += loss.item()
-        return running_loss / len(self.val_loader)
+        accuracy = correct / total if self.task == 'classification' else None
+        return running_loss / len(self.val_loader), accuracy
