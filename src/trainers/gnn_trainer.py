@@ -50,7 +50,7 @@ class GNNTrainer(object):
         self.subgraph_k = subgraph_k
         self.scale_features = scale_features
         print(f'Scaling features: {self.scale_features}')
-        assert not ('nbr_distances' not in self.data_dir and self.scale_features), 'Cannot scale features if not using nbr_distances'
+        # assert not ('nbr_distances' not in self.data_dir and self.scale_features), 'Cannot scale features if not using nbr_distances'
         self.edge_attrs = edge_attrs
 
         self.hidden_channels = hidden_channels
@@ -93,7 +93,7 @@ class GNNTrainer(object):
             print(f'Loading file {file} for validation...')
             full_graph = torch.load(os.path.join(data_dir_val, file))
             val_data[file] = full_graph
-        train_dataset = ManifoldGraphDataset(self.task, train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
+        train_dataset = ManifoldGraphDataset(self.task, train_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.5, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
         val_dataset = ManifoldGraphDataset(self.task, val_data, self.subgraph_k, degree_features=self.degree_features, subsample_pctg=0.05, scale_features=self.scale_features, edge_attrs=self.edge_attrs)
 
         self.num_node_features = train_dataset.num_node_features
@@ -135,11 +135,12 @@ class GNNTrainer(object):
                 # log training and validation loss
                 self.train_writer.add_scalar('Loss', train_loss, epoch)
                 self.val_writer.add_scalar('Loss', val_loss, epoch)
-                self.val_writer.add_scalar('Accuracy', acc, epoch)
+                if self.task == 'classification': self.val_writer.add_scalar('Accuracy', acc, epoch)
                 if val_loss < val_loss_min:
                     self.save()
                     val_loss_min = val_loss
-                pbar.set_postfix_str(f'Min val loss: {val_loss:.2f}, Val acc: {acc:.2f}, Train loss: {train_loss:.2f}')
+                str = f'Min val loss: {val_loss_min:.2f}, Val acc: {acc:.2f}, Train loss: {train_loss:.2f}' if self.task == 'classification' else f'Min val loss: {val_loss_min:.2f}, Train loss: {train_loss:.2f}'
+                pbar.set_postfix_str(str)
                 pbar.update(1)
 
     def save(self):

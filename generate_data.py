@@ -279,21 +279,22 @@ def create_poincare_dataset(
     print(f'Creating poincare dataset with curvature {K}, Rh={Rh}, N={N}, k={k}, epsilon={epsilon}, features={features}, rmax={rmax}')
     X = manifold.PoincareDisk.sample(N=N, K=K, Rh=Rh)
     # data isn't embedded in euclidean space --> need to compute hyperbolic distances for kNN
-    pairwise_dists = manifold.PoincareDisk.Rdist_array(X, K=K)
-    sparse_pairwise_dists = sparse.csr_matrix(pairwise_dists)
+    geodesic_distances = manifold.PoincareDisk.Rdist_array(X, K=K) # true geodesic distances
     
-    sce = scalar_curvature_est(n=2, X=X, n_nbrs=k, Rdist=pairwise_dists, verbose=True)
+    sce = scalar_curvature_est(n=2, X=X, n_nbrs=k, geodist=geodesic_distances, verbose=True)
+    # grab rdist
+    Rdist = sparse.csr_matrix(sce.nbr_distances_mat())
     # create graph
     if epsilon is None:
         # kNN graph
         print('Computing kNN graph')
         knn_graph = KNeighborsGraph(n_neighbors=k, metric='precomputed', mode='distance')
-        adjacency_mat = knn_graph.fit_transform([sparse_pairwise_dists])[0]
+        adjacency_mat = knn_graph.fit_transform([Rdist])[0]
     else:
         # radius neighbors graph
         print('Computing radius neighbors graph')
         graph_constructor = neighbors.NearestNeighbors(radius=epsilon, metric='precomputed')
-        adjacency_mat = graph_constructor.fit(sparse_pairwise_dists).radius_neighbors_graph(sparse_pairwise_dists, epsilon, mode='distance')
+        adjacency_mat = graph_constructor.fit(Rdist).radius_neighbors_graph(Rdist, epsilon, mode='distance')
     edge_list, edge_attrs = adjmat_to_edgelist(adjacency_mat)
     edge_list = torch.tensor(edge_list).to(device)
     edge_attrs = torch.tensor(edge_attrs).to(device)
@@ -490,64 +491,64 @@ def main():
                     # edge_attrs = torch.exp(-1*edge_attrs) # edge attributes are distances, so we want to convert to affinities
 
     # Create 2-sphere data
-    d = 2
-    rs = [2.82, 2, 1.633, 1.414, 1.265, 1.15, 1.069, 1] # curvatures [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
-    for R in rs:
-        create_sphere_dataset(
-            R=R, 
-            N=N,
-            sampling_density=sampling_density, 
-            k=k, 
-            epsilon=epsilon,
-            d=d, 
-            path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
-            features_max_k=features_max_k, 
-            features=features, 
-            rmax=rmax
-        )
-    rs = [2.31, 1.032]
-    for R in rs:
-        create_sphere_dataset(
-            R=R, 
-            N=N, 
-            sampling_density=sampling_density,
-            k=k, 
-            epsilon=epsilon,
-            d=d, 
-            path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
-            features_max_k=features_max_k, 
-            features=features, 
-            rmax=rmax
-        )
-    rads = [(1, 2)]
-    for inner_radius, outer_radius in rads:
-        create_torus_dataset(
-            inner_radius=inner_radius, 
-            outer_radius=outer_radius, 
-            N=N, 
-            sampling_density=sampling_density,
-            k=k, 
-            epsilon=epsilon,
-            path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), 
-            features_max_k=features_max_k, 
-            features=features, 
-            rmax=rmax
-        )
-    # Create euclidean data
-    rad = 1
-    d = 2
-    create_euclidean_dataset(
-        N=N, 
-        sampling_density=sampling_density,
-        d=d, 
-        rad=rad, 
-        k=k, 
-        epsilon=epsilon,
-        path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), 
-        features_max_k=features_max_k, 
-        features=features, 
-        rmax=rmax
-    )
+    # d = 2
+    # rs = [2.82, 2, 1.633, 1.414, 1.265, 1.15, 1.069, 1] # curvatures [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    # for R in rs:
+    #     create_sphere_dataset(
+    #         R=R, 
+    #         N=N,
+    #         sampling_density=sampling_density, 
+    #         k=k, 
+    #         epsilon=epsilon,
+    #         d=d, 
+    #         path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
+    #         features_max_k=features_max_k, 
+    #         features=features, 
+    #         rmax=rmax
+    #     )
+    # rs = [2.31, 1.032]
+    # for R in rs:
+    #     create_sphere_dataset(
+    #         R=R, 
+    #         N=N, 
+    #         sampling_density=sampling_density,
+    #         k=k, 
+    #         epsilon=epsilon,
+    #         d=d, 
+    #         path=os.path.join(output_dir, f'sphere_dim_{d}_rad_{R}_nodes_{N}_k_{k}.pt'), 
+    #         features_max_k=features_max_k, 
+    #         features=features, 
+    #         rmax=rmax
+    #     )
+    # rads = [(1, 2)]
+    # for inner_radius, outer_radius in rads:
+    #     create_torus_dataset(
+    #         inner_radius=inner_radius, 
+    #         outer_radius=outer_radius, 
+    #         N=N, 
+    #         sampling_density=sampling_density,
+    #         k=k, 
+    #         epsilon=epsilon,
+    #         path=os.path.join(output_dir, f'torus_inrad_{inner_radius}_outrad_{outer_radius}_nodes_{N}_k_{k}.pt'), 
+    #         features_max_k=features_max_k, 
+    #         features=features, 
+    #         rmax=rmax
+    #     )
+    # # Create euclidean data
+    # rad = 1
+    # d = 2
+    # create_euclidean_dataset(
+    #     N=N, 
+    #     sampling_density=sampling_density,
+    #     d=d, 
+    #     rad=rad, 
+    #     k=k, 
+    #     epsilon=epsilon,
+    #     path=os.path.join(output_dir, f'euclidean_dim_{d}_rad_{rad}_nodes_{N}_k_{k}.pt'), 
+    #     features_max_k=features_max_k, 
+    #     features=features, 
+    #     rmax=rmax
+    # )
     # Create poincare data
     Rh = 2
     Ks = [-0.25, -0.5, -0.75, -1.0, -1.25, -1.5, -1.75, -2.0]
@@ -579,16 +580,16 @@ def main():
             rmax=rmax
         )
     # Create hyperbolic data
-    create_hyperbolic_dataset(
-        N=N, 
-        sampling_density=sampling_density,
-        k=k, 
-        epsilon=epsilon,
-        path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), 
-        features_max_k=features_max_k, 
-        features=features, 
-        rmax=rmax
-    )
+    # create_hyperbolic_dataset(
+    #     N=N, 
+    #     sampling_density=sampling_density,
+    #     k=k, 
+    #     epsilon=epsilon,
+    #     path=os.path.join(output_dir, f'hyperbolic_nodes_{N}_k_{k}.pt'), 
+    #     features_max_k=features_max_k, 
+    #     features=features, 
+    #     rmax=rmax
+    # )
 
     # # # create paraboloid data
     # a = 1
