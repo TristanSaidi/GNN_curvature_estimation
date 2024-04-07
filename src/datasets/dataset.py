@@ -11,15 +11,18 @@ from torch_geometric.transforms import OneHotDegree, GDC
 from torch_geometric.utils import dropout_node
 from src.utils import StandardScalerTorch
 import src.manifold as manifold
+from src.encodings.lcp import LocalCurvatureProfile
+
 
 class ManifoldGraphDataset(Dataset):
-    def __init__(self, full_graphs, subgraph_k, degree_features, subsample_pctg=0.05, avoid_boundary=True):
+    def __init__(self, full_graphs, subgraph_k, degree_features, subsample_pctg=0.05, avoid_boundary=True, lcp=True):
         super(ManifoldGraphDataset, self).__init__()
         self.subgraph_k = subgraph_k
         self.subsample_pctg = subsample_pctg
         self.full_graphs = full_graphs
         self.degree_features = degree_features
         self.avoid_boundary = avoid_boundary
+        self.lcp = lcp # whether to use local curvature profile encoding
         if self.degree_features:
             self.one_hot_transform = OneHotDegree(max_degree=10)
         self.prepare_data()
@@ -30,6 +33,12 @@ class ManifoldGraphDataset(Dataset):
         for (name, data) in self.full_graphs.items():
             full_graph = data['graph']
             X = data['coords']
+            if self.lcp:
+                lcp = LocalCurvatureProfile()
+                full_graph.edge_index = full_graph.edge_index.T
+                full_graph = lcp.compute_orc(full_graph)
+                full_graph.edge_index = full_graph.edge_index.T
+                print('Computed local curvature profile encoding\n')
             # choose random subset of indices for constructing subgraphs
             if self.subsample_pctg < 1:
                 indices = np.random.choice(full_graph.x.shape[0], int(self.subsample_pctg * full_graph.x.shape[0]), replace=False).tolist()
