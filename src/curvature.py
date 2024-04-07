@@ -101,7 +101,7 @@ class KDE:
         return N**(-1/(n+4))
     
 class scalar_curvature_est:
-    def __init__(self, n, X = None, n_nbrs = 20, kernel = None, density = None, Rdist = None, T = None, nbr_matrix = None, verbose = True):
+    def __init__(self, n, X = None, n_nbrs = 20, kernel = None, density = None, Rdist = None, geodist=None, T = None, nbr_matrix = None, verbose = True):
         '''
         Parameters
         ----------
@@ -117,11 +117,13 @@ class scalar_curvature_est:
         '''
         assert X is not None or Rdist is not None
         self.X = X
+        self.geodist = geodist
         self.n = n
         self.n_nbrs = n_nbrs
         self.density = density
         self.Vn = (math.pi**(self.n/2))/gamma(self.n/2 + 1) # volume of Euclidean unit n-ball
-        
+        self.precomputed = geodist is not None
+
         if X is not None:
             self.N = X.shape[0] # number of observations
             self.d = X.shape[1] # ambient dimension
@@ -129,7 +131,10 @@ class scalar_curvature_est:
             self.N = Rdist.shape[0]
             
         if Rdist is None:
-            self.Rdist, self.iso = scalar_curvature_est.compute_Rdist(X, n_nbrs)
+            if not self.precomputed:
+                self.Rdist, self.iso = scalar_curvature_est.compute_Rdist(X, n_nbrs)
+            else: # if geodesics were passed, use them to 'estimate' Rdist (even though we have base truth)
+                self.Rdist, self.iso = scalar_curvature_est.Rdist_from_geodist(geodist, n_nbrs)
             if verbose: print("computed Rdist")
         else:
             self.Rdist = Rdist
@@ -283,6 +288,13 @@ class scalar_curvature_est:
         Rdist = iso.dist_matrix_
         return Rdist, iso
     
+    def Rdist_from_geodist(geodist, n_nbrs):
+        iso = Isomap(n_neighbors = n_nbrs, n_jobs = -1, metric='precomputed')
+        # fetch indices and distances from nbrs instance
+        iso.fit(geodist)
+        Rdist = iso.dist_matrix_
+        return Rdist, iso
+    
     def estimate(self, rmax, indices = None, rmin = None, version = 2, with_error = False, avg_k = 0):
         # TO DO- parallelize and allow different rmaxes for each point
         '''
@@ -379,7 +391,10 @@ class scalar_curvature_est:
         Rdist: NxN numpy array, where Rdist[i, j] is estimated geodesic/Riemannian distance between ith and jth points.
         '''
         if self.Rdist is None:
-            self.Rdist = scalar_curvature_est.compute_Rdist(self.X, self.n_nbrs)
+            if self.precomputed:
+                self.Rdist, self.iso = scalar_curvature_est.Rdist_from_geodist(self.geodist, self.n_nbrs)
+            else:
+                self.Rdist, self.iso = scalar_curvature_est.compute_Rdist(self.X, self.n_nbrs)
         return self.Rdist
     
     def nbr_distances(self, i, rmax = None, max_k = None):
@@ -411,3 +426,15 @@ class scalar_curvature_est:
             distances = distances[:(max_k + 1)]
             nbr_indices = nbr_indices[: (max_k + 1)]
         return distances, nbr_indices
+    
+    def nbr_distances_mat(self):
+        '''
+        Create pairwise est dist matrix (unsorted)
+        '''
+        nbr_distances = np.zeros((self.N, self.N))
+        for i in range(self.N):
+            distances, indices = self.nbr_distances(i, max_k = self.N)
+            # distances are sorted. Unsort them
+            unsorted_indices = np.argsort(indices)
+            nbr_distances[i, :] = distances[unsorted_indices]
+        return nbr_distances

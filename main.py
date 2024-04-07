@@ -6,7 +6,12 @@ from src.trainers.gnn_trainer import GNNTrainer
 def main() -> int:
     parser = argparse.ArgumentParser(
         description='Train a GNN to predict scalar curvature')
-
+    parser.add_argument(
+        '--task',
+        default='regression',
+        choices=['regression', 'classification'],
+        help='type of task to perform'
+    )
     parser.add_argument(
         '--data_dir',
         default='data',
@@ -59,6 +64,15 @@ def main() -> int:
         help='learning rate for optimizer'
     )
     parser.add_argument(
+        '--scale_features',
+        action='store_true'
+    )
+    parser.add_argument(
+        '--edge_attrs',
+        default='distance',
+        choices=['distance', 'connectivity', 'affinity'],
+    )
+    parser.add_argument(
         '--degree_features',
         default=False,
         type=bool,
@@ -103,7 +117,6 @@ def main() -> int:
 
     args = parser.parse_args()
     configs = args.__dict__
-
     # for repeatability
     torch.manual_seed(configs.pop('seed'))
 
